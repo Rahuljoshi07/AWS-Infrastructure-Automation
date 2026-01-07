@@ -1,0 +1,48 @@
+# Copy this file to terraform.tfvars and customize with your values
+
+aws_region   = "us-east-1"
+project_name = "aws-infrastructure-automation"
+environment  = "dev"
+
+# VPC Configuration
+vpc_cidr             = "10.0.0.0/16"
+availability_zones   = ["us-east-1a", "us-east-1b"]
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.20.0/24"]
+
+# EC2 Configuration
+instance_type  = "t3.micro"
+instance_count = 2
+key_pair_name  = "your-ssh-key-name" # Replace with your key pair name
+
+# Security
+allowed_ssh_cidr = ["YOUR_IP/32"] # Replace with your IP address
+
+# CloudWatch
+enable_detailed_monitoring = true
+alarm_email                = "your-email@example.com" # Replace with your email
+
+# Auto Scaling Configuration
+asg_min_size           = 2
+asg_max_size           = 6
+asg_desired_capacity   = 2
+enable_scheduled_scaling = false
+
+# RDS Configuration
+enable_rds                 = true
+db_name                    = "appdb"
+db_username                = "dbadmin"
+db_instance_class          = "db.t3.micro"
+db_allocated_storage       = 20
+db_max_allocated_storage   = 100
+db_multi_az                = false # Set to true for production
+db_backup_retention_period = 7
+enable_rds_replica         = false
+
+# SSL/TLS Configuration
+enable_https = false # Set to true if you have a domain
+domain_name  = ""    # e.g., "example.com"
+use_route53  = false # Set to true if using Route53 for DNS
+
+# ALB Configuration
+enable_alb_logging = false

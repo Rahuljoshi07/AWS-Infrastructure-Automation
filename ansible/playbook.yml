@@ -1,0 +1,265 @@
+---
+# Main playbook to configure web servers and deploy application
+- name: Configure Web Servers
+  hosts: web_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    app_name: sample-app
+    app_port: 8080
+    app_dir: /opt/app
+    log_dir: /var/log/{{ app_name }}
+
+  tasks:
+    - name: Update all packages
+      yum:
+        name: "*"
+        state: latest
+        update_cache: yes
+
+    - name: Install required packages
+      yum:
+        name:
+          - git
+          - wget
+          - curl
+          - htop
+          - vim
+          - python3
+          - python3-pip
+          - java-11-openjdk
+          - nginx
+        state: present
+
+    - name: Install Docker
+      yum:
+        name: docker
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+
+    - name: Create log directory
+      file:
+        path: "{{ log_dir }}"
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0755'
+
+    - name: Configure log rotation
+      copy:
+        dest: /etc/logrotate.d/{{ app_name }}
+        content: |
+          {{ log_dir }}/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              notifempty
+              missingok
+              create 0644 ec2-user ec2-user
+          }
+        mode: '0644'
+
+    - name: Configure Nginx
+      template:
+        src: templates/nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+        backup: yes
+      notify: restart nginx
+
+    - name: Start and enable Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Configure firewall (if firewalld is present)
+      block:
+        - name: Check if firewalld is installed
+          command: which firewalld
+          register: firewalld_check
+          failed_when: false
+          changed_when: false
+
+        - name: Allow HTTP through firewall
+          firewalld:
+            service: http
+            permanent: yes
+            state: enabled
+            immediate: yes
+          when: firewalld_check.rc == 0
+
+        - name: Allow HTTPS through firewall
+          firewalld:
+            service: https
+            permanent: yes
+            state: enabled
+            immediate: yes
+          when: firewalld_check.rc == 0
+      rescue:
+        - name: Firewall configuration skipped
+          debug:
+            msg: "Firewalld not available, skipping firewall configuration"
+
+    - name: Set timezone to UTC
+      timezone:
+        name: UTC
+
+    - name: Configure system limits
+      pam_limits:
+        domain: '*'
+        limit_type: "{{ item.limit_type }}"
+        limit_item: "{{ item.limit_item }}"
+        value: "{{ item.value }}"
+      loop:
+        - { limit_type: 'soft', limit_item: 'nofile', value: '65536' }
+        - { limit_type: 'hard', limit_item: 'nofile', value: '65536' }
+        - { limit_type: 'soft', limit_item: 'nproc', value: '4096' }
+        - { limit_type: 'hard', limit_item: 'nproc', value: '4096' }
+
+    - name: Create health check script
+      copy:
+        dest: "{{ app_dir }}/health_check.sh"
+        content: |
+          #!/bin/bash
+          # Simple health check script
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:{{ app_port }}/health)
+          if [ $response -eq 200 ]; then
+            echo "Service is healthy"
+            exit 0
+          else
+            echo "Service is unhealthy (HTTP $response)"
+            exit 1
+          fi
+        mode: '0755'
+        owner: ec2-user
+        group: ec2-user
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+- name: Deploy Application
+  hosts: web_servers
+  become: yes
+  gather_facts: no
+
+  vars:
+    app_name: sample-app
+    app_port: 8080
+    app_dir: /opt/app
+
+  tasks:
+    - name: Create sample application
+      copy:
+        dest: "{{ app_dir }}/app.py"
+        content: |
+          #!/usr/bin/env python3
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+          import json
+          import socket
+          
+          class SimpleHandler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path == '/health':
+                      self.send_response(200)
+                      self.send_header('Content-type', 'application/json')
+                      self.end_headers()
+                      response = {'status': 'healthy', 'hostname': socket.gethostname()}
+                      self.wfile.write(json.dumps(response).encode())
+                  elif self.path == '/':
+                      self.send_response(200)
+                      self.send_header('Content-type', 'text/html')
+                      self.end_headers()
+                      html = f'''
+                      <html>
+                      <head><title>AWS Infrastructure Demo</title></head>
+                      <body>
+                          <h1>Welcome to AWS Infrastructure Automation!</h1>
+                          <p>Server: {socket.gethostname()}</p>
+                          <p>This application is deployed using Terraform and Ansible</p>
+                      </body>
+                      </html>
+                      '''
+                      self.wfile.write(html.encode())
+                  else:
+                      self.send_response(404)
+                      self.end_headers()
+          
+          if __name__ == '__main__':
+              server = HTTPServer(('0.0.0.0', {{ app_port }}), SimpleHandler)
+              print(f'Server running on port {{ app_port }}')
+              server.serve_forever()
+        mode: '0755'
+        owner: ec2-user
+        group: ec2-user
+
+    - name: Create systemd service for application
+      copy:
+        dest: /etc/systemd/system/{{ app_name }}.service
+        content: |
+          [Unit]
+          Description={{ app_name }} Application
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=ec2-user
+          Group=ec2-user
+          WorkingDirectory={{ app_dir }}
+          ExecStart=/usr/bin/python3 {{ app_dir }}/app.py
+          Restart=always
+          RestartSec=10
+          StandardOutput=append:/var/log/{{ app_name }}/app.log
+          StandardError=append:/var/log/{{ app_name }}/app.log
+          
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Start and enable application service
+      systemd:
+        name: "{{ app_name }}"
+        state: started
+        enabled: yes
+
+    - name: Wait for application to start
+      wait_for:
+        port: "{{ app_port }}"
+        delay: 5
+        timeout: 60
+
+    - name: Verify application is responding
+      uri:
+        url: "http://localhost:{{ app_port }}/health"
+        return_content: yes
+      register: health_check
+      retries: 3
+      delay: 5
+      until: health_check.status == 200
