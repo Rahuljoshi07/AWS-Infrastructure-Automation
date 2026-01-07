@@ -368,39 +368,6 @@ This project implements several AWS security best practices:
 - Enable MFA for AWS account access
 - Regularly rotate SSH keys and credentials
 
-## 💰 Cost Optimization
-
-Estimated monthly costs (US-East-1):
-
-**Basic Configuration** (dev/test):
-- 2x t3.micro EC2 instances (ASG): ~$15
-- Application Load Balancer: ~$18
-- NAT Gateway: ~$32
-- RDS db.t3.micro (Single-AZ): ~$15
-- CloudWatch Logs & Metrics: ~$5
-- EBS Storage (40GB): ~$4
-- **Total**: ~$89/month
-
-**Production Configuration** (with high availability):
-- 4x t3.small EC2 instances (ASG): ~$60
-- Application Load Balancer: ~$18
-- NAT Gateway (2 AZs): ~$64
-- RDS db.t3.small (Multi-AZ): ~$60
-- RDS Read Replica: ~$30
-- CloudWatch: ~$10
-- EBS Storage: ~$8
-- **Total**: ~$250/month
-
-**Cost Reduction Strategies**:
-- Use spot instances for non-production (saves 70-90%)
-- Remove NAT Gateway (use public subnets only for dev)
-- Disable RDS for development environments
-- Use smaller instance types for testing
-- Reduce CloudWatch retention periods
-- Stop instances when not in use (dev/test)
-- Use AWS Savings Plans or Reserved Instances for production
-- Enable RDS storage autoscaling only when needed
-
 ## 🧹 Cleanup
 
 To destroy all resources and avoid charges:
@@ -450,50 +417,6 @@ Future enhancements could include:
 
 This project is provided as-is for educational and demonstration purposes.
 
-## ⚠️ Troubleshooting
-
-### Common Issues
-
-**Issue**: Terraform fails with "InvalidKeyPair.NotFound"
-- **Solution**: Ensure the SSH key pair exists in your AWS region
-
-**Issue**: Ansible cannot connect to instances
-- **Solution**: Verify security group allows SSH from your IP, check SSH key permissions (chmod 400)
-
-**Issue**: CloudWatch alarms not triggering
-- **Solution**: Confirm SNS subscription is confirmed via email
-
-**Issue**: Application not accessible
-- **Solution**: Check security group rules, verify Nginx is running, check application logs
-
-### Getting Help
-
-```bash
-# Check Terraform state
-terraform show
-
-# View Ansible facts
-ansible all -m setup
-
-# Check EC2 instance status
-aws ec2 describe-instance-status --instance-ids <INSTANCE_ID>
-
-# View CloudWatch logs
-aws logs tail /aws/ec2/aws-infrastructure-automation --follow
-
-# Check Auto Scaling Group status
-aws autoscaling describe-auto-scaling-groups \
-  --auto-scaling-group-names aws-infrastructure-automation-asg
-
-# View ALB status
-aws elbv2 describe-load-balancers \
-  --names aws-infrastructure-automation-alb
-
-# Check RDS status (if enabled)
-aws rds describe-db-instances \
-  --db-instance-identifier aws-infrastructure-automation-db
-```
-
 ---
 
 ## 🎓 Project Statistics
@@ -507,26 +430,6 @@ aws rds describe-db-instances \
 - **Documentation**: 5 comprehensive guides
 - **Production Ready**: ✅ YES!
 
-## 🏆 What Makes This Project Stand Out
-
-1. **Enterprise-Grade Architecture**: Multi-AZ, auto-scaling, load balancing
-2. **Complete Automation**: From provisioning to deployment
-3. **Security First**: Encryption, IAM roles, security groups, VPC flow logs
-4. **Production Ready**: All features implemented, tested, and documented
-5. **Cost Optimized**: Auto scaling, right-sizing, scheduled policies
-6. **Well Documented**: 5 detailed guides with diagrams and examples
-7. **CI/CD Integrated**: Automated testing and deployment pipeline
-8. **Monitoring Built-in**: CloudWatch metrics, alarms, and dashboards
-
-## 🎯 Use Cases
-
-This infrastructure is perfect for:
-- **Web Applications**: Scalable, highly available web apps
-- **API Services**: RESTful APIs with database backend
-- **Microservices**: Multiple services with load balancing
-- **Development/Staging**: Cost-effective pre-production environments
-- **Learning AWS**: Complete example of AWS best practices
-- **Portfolio Projects**: Demonstrate infrastructure skills
 
 ---
 
